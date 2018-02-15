@@ -19,11 +19,9 @@ function out = gason( in )
 % Gason requires C++11 to compile (for GCC this requires version 4.7 or
 % later). The following command compiles the parser (may require tweaking):
 %   mex('CXXFLAGS=\$CXXFLAGS -std=c++11 -Wall','-largeArrayDims',...
-%     'private/gasonMex.cpp','../common/gason.cpp',...
-%     '-I../common/','-outdir','private');
+%     'private/gasonMex.cpp','private/gason.cpp','-outdir','private');
 % Note the use of the "-std=c++11" flag. A number of precompiled binaries
-% are included, please do not contact us for help with compiling. If needed
-% you can specify a compiler by adding the option 'CXX="/usr/bin/g++"'.
+% are included, please do not contact us for help with compiling.
 %
 % Note that by default JSON arrays that contain only numbers are stored as
 % regular Matlab arrays. Likewise, JSON arrays that contain only objects of
@@ -45,9 +43,9 @@ function out = gason( in )
 %
 % See also
 %
-% Microsoft COCO Toolbox.      version 2.0
+% Microsoft COCO Toolbox.      Version 1.0
 % Data, paper, and tutorials available at:  http://mscoco.org/
 % Code written by Piotr Dollar and Tsung-Yi Lin, 2015.
 % Licensed under the Simplified BSD License [see coco/license.txt]
 
-out = gasonMex( 'convert', in );
+out = gasonMex( in );

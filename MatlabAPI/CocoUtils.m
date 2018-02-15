@@ -10,17 +10,15 @@ classdef CocoUtils
   %  validateOnImageNet - Validate COCO eval code against ImageNet code.
   %  generateFakeDt     - Generate fake detections from ground truth.
   %  validateMaskApi    - Validate MaskApi against Matlab functions.
-  %  gasonSplit         - Split JSON file into multiple JSON files.
-  %  gasonMerge         - Merge JSON files into single JSON file.
   % Help on each functions can be accessed by: "help CocoUtils>function".
   %
   % See also CocoApi MaskApi CocoEval CocoUtils>convertPascalGt
   % CocoUtils>convertImageNetGt CocoUtils>convertPascalDt
   % CocoUtils>convertImageNetDt CocoUtils>validateOnPascal
   % CocoUtils>validateOnImageNet CocoUtils>generateFakeDt
-  % CocoUtils>validateMaskApi CocoUtils>gasonSplit CocoUtils>gasonMerge
+  % CocoUtils>validateMaskApi
   %
-  % Microsoft COCO Toolbox.      version 2.0
+  % Microsoft COCO Toolbox.      Version 1.0
   % Data, paper, and tutorials available at:  http://mscoco.org/
   % Code written by Piotr Dollar and Tsung-Yi Lin, 2015.
   % Licensed under the Simplified BSD License [see coco/license.txt]
@@ -44,11 +42,10 @@ classdef CocoUtils
       f=fopen([dev '/VOC' year '/ImageSets/Main/' split '.txt']);
       is=textscan(f,'%s %*s'); is=is{1}; fclose(f); n=length(is);
       data=CocoUtils.initData(C,n);
-      for i=1:n, nm=[is{i} '.jpg'];
+      for i=1:n
         f=[dev '/VOC' year '/Annotations/' is{i} '.xml'];
-        R=PASreadrecord(f); hw=R.imgsize([2 1]); O=R.objects;
-        id=is{i}; id(id=='_')=[]; id=str2double(id);
-        ignore=[O.difficult]; bbs=cat(1,O.bbox);
+        R=PASreadrecord(f); hw=R.imgsize; O=R.objects; nm=[is{i} '.jpg'];
+        id=str2double(is{i}); ignore=[O.difficult]; bbs=cat(1,O.bbox);
         t=catsMap.values({O.class}); catIds=[t{:}]; iscrowd=ignore*0;
         data=CocoUtils.addData(data,nm,id,hw,catIds,ignore,iscrowd,bbs);
       end
@@ -79,15 +76,8 @@ classdef CocoUtils
         f=fopen(f); blacklist=textscan(f,'%d %s'); fclose(f);
         t=catsMap.values(blacklist{2}); blacklist{2}=[t{:}];
       end
-      if(strcmp(split,'train'))
-        dl=@(i) [dev '/data/det_lists/' split '_pos_' int2str(i) '.txt'];
-        is=cell(1,200); for i=1:200, f=fopen(dl(i));
-          is{i}=textscan(f,'%s %*s'); is{i}=is{i}{1}; fclose(f); end
-        is=unique(cat(1,is{:})); n=length(is);
-      else
-        f=fopen([dev '/data/det_lists/' split '.txt']);
-        is=textscan(f,'%s %*s'); is=is{1}; fclose(f); n=length(is);
-      end
+      f=fopen([dev '/data/det_lists/' split '.txt']);
+      is=textscan(f,'%s %*s'); is=is{1}; fclose(f); n=length(is);
       data=CocoUtils.initData(catNms,n);
       for i=1:n
         f=[dataDir '/ILSVRC' year '_DET_bbox_' split '/' is{i} '.xml'];
@@ -165,8 +155,8 @@ classdef CocoUtils
       CocoUtils.convertPascalGt(dataDir,year,split,annFile);
       CocoUtils.convertPascalDt(sfs,resFile);
       D=CocoApi(annFile); R=D.loadRes(resFile); E=CocoEval(D,R);
-      p=E.params; p.recThrs=thrs; p.iouThrs=.5; p.areaRng=[0 inf];
-      p.useSegm=0; p.maxDets=inf; E.params=p; E.evaluate(); E.accumulate();
+      p=E.params; p.recThrs=thrs; p.catIds=1:K; p.iouThrs=.5; p.useSegm=0;
+      p.maxDets=inf; E.params=p; E.evaluate(); E.accumulate();
       apCoco=squeeze(mean(E.eval.precision,2)); deltas=abs(apCoco-ap);
       fprintf('AP delta: mean=%.2e median=%.2e max=%.2e\n',...
         mean(deltas),median(deltas),max(deltas))
@@ -198,8 +188,8 @@ classdef CocoUtils
       CocoUtils.convertImageNetDt(fs{1},resFile);
       CocoUtils.convertImageNetGt(dataDir,year,'val',annFile)
       D=CocoApi(annFile); R=D.loadRes(resFile); E=CocoEval(D,R);
-      p=E.params; p.recThrs=0:.0001:1; p.iouThrs=.5; p.areaRng=[0 inf];
-      p.useSegm=0; p.maxDets=inf; E.params=p; E.evaluate(); E.accumulate();
+      p=E.params; p.recThrs=0:.0001:1; p.iouThrs=.5; p.useSegm=0;
+      p.maxDets=inf; E.params=p; E.evaluate(); E.accumulate();
       apCoco=squeeze(mean(E.eval.precision,2)); deltas=abs(apCoco-ap);
       fprintf('AP delta: mean=%.2e median=%.2e max=%.2e\n',...
         mean(deltas),median(deltas),max(deltas))
@@ -222,12 +212,12 @@ classdef CocoUtils
       %   .fp         - [.10] false positive rate (0<fp<fn)
       %   .sigma      - [.10] translation noise (relative to object width)
       %   .seed       - [0] random seed for reproducibility
-      %   .type       - ['bbox'] can be 'bbox', 'segm', or 'keypoints'
+      %   .type       - ['bbox'] can be either 'bbox' or 'segm'
       fprintf('Generating fake detection data...    '); clk=tic;
       def={'n',100,'fn',.20,'fp',.10,'sigma',.10,'seed',0,'type','bbox'};
       opts=getPrmDflt(varargin,def,1); n=opts.n;
       if(strcmp(opts.type,'segm')), opts.type='segmentation'; end
-      assert(any(strcmp(opts.type,{'bbox','segmentation','keypoints'})));
+      assert(any(strcmp(opts.type,{'bbox','segmentation'})));
       rstream = RandStream('mrg32k3a','Seed',opts.seed); k=n*100;
       R=struct('image_id',[],'category_id',[],opts.type,[],'score',[]);
       imgIds=sort(coco.getImgIds()); imgIds=imgIds(1:n); R=repmat(R,1,k);
@@ -239,20 +229,17 @@ classdef CocoUtils
           if(t<opts.fp), catId=catIds(randi(rstream,length(catIds)));
           elseif(t<opts.fn), continue; else catId=A(j).category_id; end
           bb=A(j).bbox; dx=round(randn(rstream)*opts.sigma*bb(3));
-          if( strcmp(opts.type,'bbox') )
+          if( strcmp(opts.type,'bbox') ), M=[];
             x0=max(0,bb(1)+dx); x1=min(w-1,bb(1)+bb(3)+dx-1);
-            bb(1)=x0; bb(3)=x1-x0+1; if(bb(3)==0), continue; end; o=bb;
-          elseif( strcmp(opts.type,'segmentation') )
+            bb(1)=x0; bb(3)=x1-x0+1; if(bb(3)==0), continue; end
+          elseif( strcmp(opts.type,'segmentation') ), bb=[];
             M=MaskApi.decode(MaskApi.frPoly(A(j).segmentation,h,w)); T=M*0;
             T(:,max(1,1+dx):min(w,w+dx))=M(:,max(1,1-dx):min(w,w-dx));
-            if(nnz(T)==0), continue; end; o=MaskApi.encode(T);
-          elseif( strcmp(opts.type,'keypoints') )
-            o=A(j).keypoints; v=o(3:3:end)>0; if(~any(v)), continue; end
-            x=o(1:3:end); y=o(2:3:end); x(~v)=mean(x(v)); y(~v)=mean(y(v));
-            x=max(0,min(w-1,x+dx)); o(1:3:end)=x; o(2:3:end)=y;
+            if(nnz(T)==0), continue; end; M=MaskApi.encode(T);
           end
           k=k+1; R(k).image_id=imgIds(i); R(k).category_id=catId;
-          R(k).(opts.type)=o; R(k).score=round(rand(rstream)*1000)/1000;
+          if(isempty(bb)), R(k).segmentation=M; else R(k).bbox=bb; end
+          R(k).score=round(rand(rstream)*1000)/1000;
         end
       end
       R=R(1:k); f=fopen(dtFile,'w'); fwrite(f,gason(R)); fclose(f);
@@ -283,40 +270,6 @@ classdef CocoUtils
       if(isequal(A,B)&&isequal(Ia,IB)),
         msg='PASSED'; else msg='FAILED'; end
       warning(['MaskApi *' msg '* validation!']);
-    end
-    
-    function gasonSplit( name, k )
-      % Split JSON file into multiple JSON files.
-      %
-      % Splits file 'name.json' into multiple files 'name-*.json'. Only
-      % works for JSON arrays. Memory efficient. Inverted by gasonMerge().
-      %
-      % USAGE
-      %  CocoUtils.gasonSplit( name, k )
-      %
-      % INPUTS
-      %  name       - file containing JSON array (w/o '.json' ext)
-      %  k          - number of files to split JSON into
-      s=gasonMex('split',fileread([name '.json']),k); k=length(s);
-      for i=1:k, f=fopen(sprintf('%s-%06i.json',name,i),'w');
-        fwrite(f,s{i}); fclose(f); end
-    end
-    
-    function gasonMerge( name )
-      % Merge JSON files into single JSON file.
-      %
-      % Merge files 'name-*.json' into single file 'name.json'. Only works
-      % for JSON arrays. Memory efficient. Inverted by gasonSplit().
-      %
-      % USAGE
-      %  CocoUtils.gasonMerge( name )
-      %
-      % INPUTS
-      %  name       - files containing JSON arrays (w/o '.json' ext)
-      s=dir([name '-*.json']); s=sort({s.name}); k=length(s);
-      p=fileparts(name); for i=1:k, s{i}=fullfile(p,s{i}); end
-      for i=1:k, s{i}=fileread(s{i}); end; s=gasonMex('merge',s);
-      f=fopen([name '.json'],'w'); fwrite(f,s); fclose(f);
     end
   end
   
